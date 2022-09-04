@@ -5,6 +5,7 @@ import lombok.extern.log4j.Log4j2;
 import ru.spliterash.pubSubServiceMessaging.base.annotations.Request;
 import ru.spliterash.pubSubServiceMessaging.base.body.BodyContainer;
 import ru.spliterash.pubSubServiceMessaging.base.body.RequestCompleteContainer;
+import ru.spliterash.pubSubServiceMessaging.base.exceptions.PubSubTimeout;
 import ru.spliterash.pubSubServiceMessaging.base.pubSub.PubSubGateway;
 import ru.spliterash.pubSubServiceMessaging.base.pubSub.Subscribe;
 
@@ -29,7 +30,6 @@ public class PubSubServiceMessagingService {
     private static final String OUT = "out";
 
     private static final Integer TIMEOUT = 1000 * 5;
-    private final Executor executor;
     // Стартовый путь
     private final String startPath;
     private final String currentDomain;
@@ -42,11 +42,10 @@ public class PubSubServiceMessagingService {
     private final Map<UUID, CompletableFuture<Object>> requestsInProcess = new ConcurrentHashMap<>();
 
     public PubSubServiceMessagingService(String startPath, String currentDomain, PubSubGateway pubSubGateway) {
-        this(Executors.newCachedThreadPool(), PubSubServiceMessagingService.class.getClassLoader(), startPath, currentDomain, pubSubGateway);
+        this(PubSubServiceMessagingService.class.getClassLoader(), startPath, currentDomain, pubSubGateway);
     }
 
-    public PubSubServiceMessagingService(Executor executor, ClassLoader loader, String startPath, String currentDomain, PubSubGateway pubSubGateway) {
-        this.executor = executor;
+    public PubSubServiceMessagingService(ClassLoader loader, String startPath, String currentDomain, PubSubGateway pubSubGateway) {
         this.loader = loader;
         this.startPath = startPath;
         this.currentDomain = currentDomain;
@@ -65,9 +64,13 @@ public class PubSubServiceMessagingService {
             log.warn("Listener for path " + bodyContainer.getPath() + " not found");
             return;
         }
-
-        Object response = listener.onRequestUnchecked(request); // TODO Возвращать эксепшены
-        RequestCompleteContainer<Object> completeContainer = new RequestCompleteContainer<>(bodyContainer.getId(), response);
+        RequestCompleteContainer<Object> completeContainer;
+        try {
+            Object response = listener.onRequestUnchecked(request);
+            completeContainer = new RequestCompleteContainer<>(bodyContainer.getId(), response);
+        } catch (Exception exception) {
+            completeContainer = new RequestCompleteContainer<>(bodyContainer.getId(), exception);
+        }
 
         pubSubGateway.dispatch(getFullDomainPath(bodyContainer.getSenderDomain() + pubSubGateway.getNamespaceDelimiter() + OUT), completeContainer);
     }
@@ -77,8 +80,12 @@ public class PubSubServiceMessagingService {
 
         CompletableFuture<Object> waitingFuture = requestsInProcess.remove(id);
 
-        if (waitingFuture != null)
-            waitingFuture.complete(complete.getResponse());
+        if (waitingFuture != null) {
+            if (complete.isSuccess())
+                waitingFuture.complete(complete.getResponse());
+            else
+                waitingFuture.completeExceptionally(complete.getException());
+        }
     }
 
     protected String getFullDomainPath(String domain) {
@@ -99,8 +106,8 @@ public class PubSubServiceMessagingService {
         UUID requestID = UUID.randomUUID();
         BodyContainer<Object> objectBodyContainer = new BodyContainer<>(requestID, currentDomain, path, body);
 
-        pubSubGateway.dispatch(getFullDomainPath(domain) + pubSubGateway.getNamespaceDelimiter() + IN, objectBodyContainer);
         requestsInProcess.put(requestID, future);
+        pubSubGateway.dispatch(getFullDomainPath(domain) + pubSubGateway.getNamespaceDelimiter() + IN, objectBodyContainer);
 
         return future;
     }
@@ -110,9 +117,6 @@ public class PubSubServiceMessagingService {
     }
 
     public void destroy() {
-        if (executor instanceof ExecutorService)
-            ((ExecutorService) executor).shutdown();
-
         domainSubscribe.values().forEach(Subscribe::unsubscribe);
         domainSubscribe.clear();
     }
@@ -129,12 +133,20 @@ public class PubSubServiceMessagingService {
 
             if (annotation == null)
                 throw new RuntimeException("Annotation request not present");
+            Object arg;
             if (args.length == 0)
-                throw new RuntimeException("No method argument");
+                arg = null;
+            else
+                arg = args[0];
 
-            CompletableFuture<Object> future = makeRequest(domain, annotation.value(), args[0]);
-
-            return future.get(TIMEOUT, TimeUnit.MILLISECONDS);
+            CompletableFuture<Object> future = makeRequest(domain, annotation.value(), arg);
+            try {
+                return future.get(TIMEOUT, TimeUnit.MILLISECONDS);
+            } catch (TimeoutException timeoutException) {
+                throw new PubSubTimeout(domain, annotation.value());
+            } catch (ExecutionException exception) {
+                throw exception.getCause();
+            }
         });
     }
 
@@ -146,8 +158,12 @@ public class PubSubServiceMessagingService {
                 if (request == null)
                     throw new RuntimeException("Request not present exception");
                 MethodHandle methodHandle = lookup.unreflect(method).bindTo(instance);
+                int parameterCount = method.getParameterTypes().length;
 
-                registerListener(request.value(), methodHandle::invoke);
+                if (parameterCount == 0)
+                    registerListener(request.value(), input -> methodHandle.invokeWithArguments()); //Input null
+                else if (parameterCount == 1)
+                    registerListener(request.value(), methodHandle::invokeWithArguments);
             }
         } catch (Exception exception) {
             throw new RuntimeException(exception);

@@ -1,5 +1,14 @@
 rootProject.name = "pub-sub-service-messaging"
 
 include(
-    "core"
+    "publish",
+
+    "core",
+    "types:binary",
+    "types:binary:mapper:serializable",
+
+    "types:multipaper",
+    "types:multipaper:base",
+
+    "types:redisson"
 )
