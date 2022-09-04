@@ -3,6 +3,8 @@ import org.junit.jupiter.api.Test;
 import ru.spliterash.pubSubServiceMessaging.base.pubSub.PubSubGateway;
 import ru.spliterash.pubSubServiceMessaging.base.service.PubSubServiceMessagingService;
 
+import java.util.UUID;
+
 public class PubSubServiceTest {
     private final PubSubGateway testPubSub = new TestPubSub();
     private final PubSubServiceMessagingService service1 = new PubSubServiceMessagingService(
@@ -27,5 +29,9 @@ public class PubSubServiceTest {
         int result = client.multiply(number);
 
         Assertions.assertEquals(number * 2, result);
+
+        UUID uuid = client.noArgMethod();
+
+        Assertions.assertEquals(TestData.randomUUID, uuid);
     }
 }

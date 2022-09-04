@@ -3,6 +3,7 @@ package ru.spliterash.pubSubServiceMessaging.base.service;
 import lombok.SneakyThrows;
 import lombok.extern.log4j.Log4j2;
 import ru.spliterash.pubSubServiceMessaging.base.annotations.Request;
+import ru.spliterash.pubSubServiceMessaging.base.annotations.RequestAnnotationUtils;
 import ru.spliterash.pubSubServiceMessaging.base.body.BodyContainer;
 import ru.spliterash.pubSubServiceMessaging.base.body.RequestCompleteContainer;
 import ru.spliterash.pubSubServiceMessaging.base.exceptions.PubSubTimeout;
@@ -134,12 +135,15 @@ public class PubSubServiceMessagingService {
             if (annotation == null)
                 throw new RuntimeException("Annotation request not present");
             Object arg;
-            if (args.length == 0)
+            if (args == null || args.length == 0)
                 arg = null;
-            else
+            else if (args.length == 1)
                 arg = args[0];
+            else
+                throw new RuntimeException("Too many arguments on method " + method.getName() + " in class " + clientClass.getName());
 
-            CompletableFuture<Object> future = makeRequest(domain, annotation.value(), arg);
+
+            CompletableFuture<Object> future = makeRequest(domain, RequestAnnotationUtils.getFullPath(clientClass, annotation), arg);
             try {
                 return future.get(TIMEOUT, TimeUnit.MILLISECONDS);
             } catch (TimeoutException timeoutException) {
@@ -160,10 +164,14 @@ public class PubSubServiceMessagingService {
                 MethodHandle methodHandle = lookup.unreflect(method).bindTo(instance);
                 int parameterCount = method.getParameterTypes().length;
 
+                String methodPath = RequestAnnotationUtils.getFullPath(listenerClass, request);
                 if (parameterCount == 0)
-                    registerListener(request.value(), input -> methodHandle.invokeWithArguments()); //Input null
+                    registerListener(methodPath, input -> methodHandle.invokeWithArguments()); //Input null
                 else if (parameterCount == 1)
-                    registerListener(request.value(), methodHandle::invokeWithArguments);
+                    registerListener(methodPath, methodHandle::invokeWithArguments);
+                else
+                    throw new RuntimeException("Too many arguments on method " + method.getName() + " in class " + listenerClass.getName());
+
             }
         } catch (Exception exception) {
             throw new RuntimeException(exception);
