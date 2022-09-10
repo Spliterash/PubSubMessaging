@@ -56,6 +56,7 @@ public class PubSubServiceMessagingService {
         pubSubGateway.subscribe(RequestCompleteContainer.class, getFullDomainPath(currentDomain) + pubSubGateway.getNamespaceDelimiter() + OUT, this::acceptRequestCompleteNotification);
     }
 
+    @SuppressWarnings("unchecked")
     @SneakyThrows
     private void processRequest(BodyContainer<?> bodyContainer) {
         RequestProcessor<?, ?> listener = listeners.get(bodyContainer.getPath());
@@ -65,15 +66,48 @@ public class PubSubServiceMessagingService {
             log.warn("Listener for path " + bodyContainer.getPath() + " not found");
             return;
         }
-        RequestCompleteContainer<Object> completeContainer;
         try {
             Object response = listener.onRequestUnchecked(request);
-            completeContainer = new RequestCompleteContainer<>(bodyContainer.getId(), response);
+            if (response instanceof Future) {
+                CompletableFuture<Object> completable;
+                if (response instanceof CompletableFuture)
+                    completable = (CompletableFuture<Object>) response;
+                else {
+                    Future<Object> future = (Future<Object>) response;
+                    completable = CompletableFuture.supplyAsync(() -> {
+                        try {
+                            return future.get();
+                        } catch (InterruptedException | ExecutionException e) {
+                            throw new CompletionException(e.getCause());
+                        }
+                    });
+                }
+                completable.whenCompleteAsync((o, throwable) -> {
+                    RequestCompleteContainer<Object> container;
+                    if (throwable != null) {
+                        Throwable finalThrowable;
+                        if (throwable instanceof CompletionException)
+                            finalThrowable = throwable.getCause();
+                        else
+                            finalThrowable = throwable;
+
+                        container = new RequestCompleteContainer<>(bodyContainer.getId(), finalThrowable);
+                    } else
+                        container = new RequestCompleteContainer<>(bodyContainer.getId(), o);
+
+                    sendResult(bodyContainer.getSenderDomain(), container);
+                });
+            } else {
+                sendResult(bodyContainer.getSenderDomain(), new RequestCompleteContainer<>(bodyContainer.getId(), response));
+            }
         } catch (Exception exception) {
-            completeContainer = new RequestCompleteContainer<>(bodyContainer.getId(), exception);
+            sendResult(bodyContainer.getSenderDomain(), new RequestCompleteContainer<>(bodyContainer.getId(), exception));
         }
 
-        pubSubGateway.dispatch(getFullDomainPath(bodyContainer.getSenderDomain() + pubSubGateway.getNamespaceDelimiter() + OUT), completeContainer);
+    }
+
+    private void sendResult(String senderDomain, RequestCompleteContainer<?> container) {
+        pubSubGateway.dispatch(getFullDomainPath(senderDomain + pubSubGateway.getNamespaceDelimiter() + OUT), container);
     }
 
     private void acceptRequestCompleteNotification(RequestCompleteContainer<?> complete) {
@@ -113,6 +147,13 @@ public class PubSubServiceMessagingService {
         return future;
     }
 
+    private void makeRequestVoid(String domain, String path, Object body) {
+        UUID requestID = UUID.randomUUID();
+        BodyContainer<Object> objectBodyContainer = new BodyContainer<>(requestID, currentDomain, path, body);
+
+        pubSubGateway.dispatch(getFullDomainPath(domain) + pubSubGateway.getNamespaceDelimiter() + IN, objectBodyContainer);
+    }
+
     private void registerListener(String path, RequestProcessor<Object, Object> handleFunc) {
         listeners.put(path, handleFunc);
     }
@@ -141,16 +182,32 @@ public class PubSubServiceMessagingService {
                 arg = args[0];
             else
                 throw new RuntimeException("Too many arguments on method " + method.getName() + " in class " + clientClass.getName());
+            String path = RequestAnnotationUtils.getFullPath(clientClass, annotation);
 
-
-            CompletableFuture<Object> future = makeRequest(domain, RequestAnnotationUtils.getFullPath(clientClass, annotation), arg);
-            try {
-                return future.get(TIMEOUT, TimeUnit.MILLISECONDS);
-            } catch (TimeoutException timeoutException) {
-                throw new PubSubTimeout(domain, annotation.value());
-            } catch (ExecutionException exception) {
-                throw exception.getCause();
+            if (method.getReturnType().equals(Void.class)) {
+                makeRequestVoid(domain, path, arg);
+                return null;
             }
+            CompletableFuture<Object> future = makeRequest(domain, path, arg);
+            // Если этот метод возвращает фучуре, то обрабатываем его чутка по другому
+            if (Future.class.isAssignableFrom(method.getReturnType())) {
+                CompletableFuture<Object> result = new CompletableFuture<>();
+                future.whenComplete((r, e) -> {
+                    if (e != null)
+                        result.completeExceptionally(e);
+                    else
+                        result.complete(r);
+                });
+
+                return result;
+            } else
+                try {
+                    return future.get(TIMEOUT, TimeUnit.MILLISECONDS);
+                } catch (TimeoutException timeoutException) {
+                    throw new PubSubTimeout(domain, annotation.value());
+                } catch (ExecutionException exception) {
+                    throw exception.getCause();
+                }
         });
     }
 

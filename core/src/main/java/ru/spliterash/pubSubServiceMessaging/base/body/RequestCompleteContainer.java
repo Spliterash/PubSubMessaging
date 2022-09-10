@@ -15,13 +15,13 @@ public final class RequestCompleteContainer<T> implements Serializable {
         this.exception = null;
     }
 
-    public RequestCompleteContainer(UUID requestID, Exception exception) {
+    public RequestCompleteContainer(UUID requestID, Throwable exception) {
         this.requestID = requestID;
         this.response = null;
         this.exception = exception;
     }
 
-    private final Exception exception;
+    private final Throwable exception;
     private final T response;
 
     public boolean isSuccess() {
