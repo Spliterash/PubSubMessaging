@@ -35,7 +35,7 @@ public class PlayerController implements PlayerResource {
 ```
 Register implementation
 ```java
-PubSubServiceMessagingService service;
+PubSubMessagingService service;
 PlayerController controller;
 
 service.registerHandler(PlayerResource.class, controller);
@@ -66,7 +66,7 @@ repositories {
 
 dependencies {
     // Not working on gradle lower 6
-    implementation(platform("ru.spliterash:pub-sub-service-messaging-bom:1.0.0"))
+    implementation(platform("ru.spliterash:pub-sub-messaging-bom:1.0.0"))
 }
 ```
 
@@ -74,11 +74,11 @@ The library is written using dependency inversion, so you can build it as a cons
 
 ### Standalone application
 If you have a server application, then the best choice is to use a module with redisson, it sends your messages through
-redis. just add dependency, and initialize `PubSubServiceMessagingService` with `RedissonPubSub`
+redis. just add dependency, and initialize `PubSubMessagingService` with `RedissonPubSub`
 
 ```kotlin
 dependencies {
-    implementation("ru.spliterash:pub-sub-service-messaging-types-redisson:1.0.0")
+    implementation("ru.spliterash:pub-sub-messaging-types-redisson")
 }
 ```
 
@@ -86,9 +86,13 @@ dependencies {
 ### Multipaper
 If you use multipaper, you can use this
 
+PS. Dont forget shadow jar and relocate
+
 ```kotlin
 dependencies {
-    implementation("ru.spliterash:pub-sub-service-messaging-types-multipaper:1.0.0")
+    implementation("ru.spliterash:pub-sub-messaging-types-multipaper") {
+        exclude("org.apache.logging.log4j")
+    }
 }
 ```
 
