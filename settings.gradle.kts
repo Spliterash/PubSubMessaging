@@ -1,4 +1,4 @@
-rootProject.name = "pub-sub-service-messaging"
+rootProject.name = "pub-sub-messaging"
 
 include(
     "publish",

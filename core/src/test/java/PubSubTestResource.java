@@ -1,4 +1,4 @@
-import ru.spliterash.pubSubServiceMessaging.base.annotations.Request;
+import ru.spliterash.pubSubMessaging.base.annotations.Request;
 
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;

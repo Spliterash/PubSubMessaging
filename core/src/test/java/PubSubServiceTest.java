@@ -1,21 +1,22 @@
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
-import ru.spliterash.pubSubServiceMessaging.base.pubSub.PubSubGateway;
-import ru.spliterash.pubSubServiceMessaging.base.service.PubSubServiceMessagingService;
+import ru.spliterash.pubSubMessaging.base.pubSub.PubSubGateway;
+import ru.spliterash.pubSubMessaging.base.service.PubSubMessagingService;
 
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 
 public class PubSubServiceTest {
     private static final PubSubGateway testPubSub = new TestPubSub();
-    private static final PubSubServiceMessagingService service1 = new PubSubServiceMessagingService(
+    private static final PubSubMessagingService service1 = new PubSubMessagingService(
             "",
             "service1",
             testPubSub
     );
-    private static final PubSubServiceMessagingService service2 = new PubSubServiceMessagingService(
+    private static final PubSubMessagingService service2 = new PubSubMessagingService(
             "",
             "service2",
             testPubSub
@@ -26,6 +27,12 @@ public class PubSubServiceTest {
     public static void init() {
         service2.registerHandler(PubSubTestResource.class, new PubSubTestController());
         service2Client = service1.createClient("service2", PubSubTestResource.class);
+    }
+
+    @AfterAll
+    public static void destroy() {
+        service1.destroy();
+        service2.destroy();
     }
 
     @Test
