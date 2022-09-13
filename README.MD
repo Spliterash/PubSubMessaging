@@ -66,7 +66,7 @@ repositories {
 
 dependencies {
     // Not working on gradle lower 6
-    implementation(platform("ru.spliterash:pub-sub-messaging-bom:1.0.0"))
+    implementation(platform("ru.spliterash:pub-sub-messaging-bom:1.0.0-SNAPSHOT"))
 }
 ```
 
