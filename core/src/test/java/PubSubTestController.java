@@ -93,6 +93,11 @@ public class PubSubTestController implements PubSubTestResource {
     }
 
     @Override
+    public String expMethod(String str) {
+        throw new RuntimeException(str);
+    }
+
+    @Override
     public void voidMethod(String str) {
         consumer.accept(str);
     }

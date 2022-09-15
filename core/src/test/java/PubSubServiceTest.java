@@ -12,6 +12,8 @@ import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.function.Consumer;
 
+import static org.junit.jupiter.api.Assertions.fail;
+
 public class PubSubServiceTest {
     private static final TestPubSub testPubSub = new TestPubSub();
     private static final Consumer<String> consumer = Mockito.mock(Consumer.class);
@@ -53,6 +55,17 @@ public class PubSubServiceTest {
     }
 
     @Test
+    public void testException() {
+        String str = "12345";
+        try {
+            service2Client.expMethod(str);
+            fail("Exception not throws");
+        } catch (RuntimeException exception) {
+            Assertions.assertEquals(str, exception.getMessage());
+        }
+    }
+
+    @Test
     public void testFutureMessaging() throws Exception {
         Object uuid = service2Client.futureMethod().get();
 
@@ -83,7 +96,7 @@ public class PubSubServiceTest {
     public void testNotCompletableFutureException() {
         try {
             service2Client.notCompletableFutureMethodExc().get();
-            Assertions.fail("Exception not throws");
+            fail("Exception not throws");
         } catch (InterruptedException | ExecutionException e) {
             Assertions.assertInstanceOf(TestException.class, e.getCause());
         }

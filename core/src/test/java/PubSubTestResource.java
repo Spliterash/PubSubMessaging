@@ -26,6 +26,9 @@ public interface PubSubTestResource {
     @Request("not-completable-future-method")
     Future<UUID> notCompletableFutureMethod();
 
+    @Request("exp-method")
+    String expMethod(String str);
+
     @Request("void-method")
     void voidMethod(String str);
 }
