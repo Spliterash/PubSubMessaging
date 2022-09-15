@@ -1,3 +1,4 @@
+import lombok.Setter;
 import ru.spliterash.pubSubMessaging.base.pubSub.PubSubGateway;
 import ru.spliterash.pubSubMessaging.base.pubSub.Subscribe;
 import ru.spliterash.pubSubMessaging.base.pubSub.SubscribeListener;
@@ -13,6 +14,8 @@ import java.util.concurrent.Executors;
 public class TestPubSub implements PubSubGateway {
     private final Map<String, Collection<SubscribeListener<?>>> listeners = new HashMap<>();
     private final ExecutorService executor = Executors.newCachedThreadPool();
+    @Setter
+    private volatile boolean needSleep = false;
 
     @Override
     public <T> Subscribe subscribe(Class<T> topicClass, String path, SubscribeListener<T> listener) {
@@ -28,6 +31,13 @@ public class TestPubSub implements PubSubGateway {
             Collection<SubscribeListener<?>> listener = listeners.getOrDefault(path, Collections.emptyList());
 
             Object clonedObject = cloneObject(event);
+            if (needSleep) {
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+            }
 
             for (SubscribeListener<?> subscribeListener : listener) {
                 onEventUnchecked(subscribeListener, clonedObject);

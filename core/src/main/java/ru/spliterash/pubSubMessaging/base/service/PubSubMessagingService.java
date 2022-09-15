@@ -76,6 +76,8 @@ public class PubSubMessagingService {
         }
         try {
             Object response = listener.onRequestUnchecked(request);
+            if (listener.isVoid())
+                return;
             if (response instanceof Future) {
                 Future<Object> future = (Future<Object>) response;
                 CompletableFuture<Object> completable;
@@ -193,7 +195,7 @@ public class PubSubMessagingService {
                 throw new RuntimeException("Too many arguments on method " + method.getName() + " in class " + clientClass.getName());
             String path = RequestAnnotationUtils.getFullPath(clientClass, annotation);
 
-            if (method.getReturnType().equals(Void.class)) {
+            if (method.getReturnType().equals(void.class)) {
                 makeRequestVoid(domain, path, arg);
                 return null;
             }
@@ -223,16 +225,49 @@ public class PubSubMessagingService {
                 int parameterCount = method.getParameterTypes().length;
 
                 String methodPath = RequestAnnotationUtils.getFullPath(listenerClass, request);
+                boolean isVoid = method.getReturnType().equals(void.class);
+
                 if (parameterCount == 0)
-                    registerListener(methodPath, input -> methodHandle.invokeWithArguments()); //Input null
+                    registerListener(methodPath, new RequestProcessor<Object, Object>() {
+                        @Override
+                        public Object onRequest(Object input) throws Throwable {
+                            return methodHandle.invokeWithArguments();
+                        }
+
+                        @Override
+                        public boolean isVoid() {
+                            return isVoid;
+                        }
+                    }); //Input null
                 else if (parameterCount == 1)
-                    registerListener(methodPath, methodHandle::invokeWithArguments);
+                    registerListener(methodPath, new RequestProcessor<Object, Object>() {
+                        @Override
+                        public Object onRequest(Object input) throws Throwable {
+                            return methodHandle.invokeWithArguments(input);
+                        }
+
+                        @Override
+                        public boolean isVoid() {
+                            return isVoid;
+                        }
+                    });
                 else
                     throw new RuntimeException("Too many arguments on method " + method.getName() + " in class " + listenerClass.getName());
 
             }
         } catch (Exception exception) {
             throw new RuntimeException(exception);
+        }
+    }
+
+    private interface RequestProcessor<I, O> {
+        O onRequest(I input) throws Throwable;
+
+        boolean isVoid();
+
+        default Object onRequestUnchecked(Object in) throws Throwable {
+            //noinspection unchecked
+            return onRequest((I) in);
         }
     }
 }

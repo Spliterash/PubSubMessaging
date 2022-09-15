@@ -3,14 +3,18 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
-import ru.spliterash.pubSubMessaging.base.pubSub.PubSubGateway;
 import ru.spliterash.pubSubMessaging.base.service.PubSubMessagingService;
 
+import java.lang.reflect.Field;
+import java.time.Duration;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
+import java.util.function.Consumer;
 
 public class PubSubServiceTest {
-    private static final PubSubGateway testPubSub = new TestPubSub();
+    private static final TestPubSub testPubSub = new TestPubSub();
+    private static final Consumer<String> consumer = Mockito.mock(Consumer.class);
     private static final PubSubMessagingService service1 = new PubSubMessagingService(
             "",
             "service1",
@@ -25,7 +29,7 @@ public class PubSubServiceTest {
 
     @BeforeAll
     public static void init() {
-        service2.registerHandler(PubSubTestResource.class, new PubSubTestController());
+        service2.registerHandler(PubSubTestResource.class, new PubSubTestController(consumer));
         service2Client = service1.createClient("service2", PubSubTestResource.class);
     }
 
@@ -83,6 +87,28 @@ public class PubSubServiceTest {
         } catch (InterruptedException | ExecutionException e) {
             Assertions.assertInstanceOf(TestException.class, e.getCause());
         }
+    }
+
+    @SuppressWarnings("rawtypes")
+    @Test
+    public void optimizedVoidCallsTest() throws IllegalAccessException, NoSuchFieldException, InterruptedException {
+        testPubSub.setNeedSleep(true);
+        String testStr = "someString";
+
+        Field field = service2.getClass().getDeclaredField("requestsInProcess");
+        field.setAccessible(true);
+
+        Map requestsInProcess = (Map) field.get(service2);
+
+        Assertions.assertEquals(0, requestsInProcess.size());
+        Assertions.assertTimeoutPreemptively(Duration.ofMillis(200), () -> service2Client.voidMethod(testStr));
+        Assertions.assertEquals(0, requestsInProcess.size());
+
+        Thread.sleep(1100);
+
+        Mockito.verify(consumer).accept(testStr);
+
+        testPubSub.setNeedSleep(false);
     }
 
 

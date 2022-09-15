@@ -1,7 +1,13 @@
+import lombok.RequiredArgsConstructor;
+
 import java.util.UUID;
 import java.util.concurrent.*;
+import java.util.function.Consumer;
 
+@RequiredArgsConstructor
 public class PubSubTestController implements PubSubTestResource {
+    private final Consumer<String> consumer;
+
     @Override
     public int multiply(int number) {
         return number * 2;
@@ -84,5 +90,10 @@ public class PubSubTestController implements PubSubTestResource {
                 return get();
             }
         };
+    }
+
+    @Override
+    public void voidMethod(String str) {
+        consumer.accept(str);
     }
 }
