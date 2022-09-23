@@ -6,6 +6,7 @@ include(
     "core",
     "types:binary",
     "types:binary:mapper:serializable",
+    "types:binary:mapper:kryo",
 
     "types:multipaper",
     "types:multipaper:base",
