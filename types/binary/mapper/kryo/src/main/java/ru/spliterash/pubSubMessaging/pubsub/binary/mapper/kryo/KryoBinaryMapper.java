@@ -6,6 +6,7 @@ import com.esotericsoftware.kryo.io.Output;
 import com.esotericsoftware.kryo.serializers.JavaSerializer;
 import com.esotericsoftware.kryo.util.Pool;
 import lombok.AllArgsConstructor;
+import org.objenesis.strategy.StdInstantiatorStrategy;
 import ru.spliterash.pubSubMessaging.pubsub.binary.port.BinaryObjectMapper;
 
 import java.io.ByteArrayInputStream;
@@ -51,6 +52,7 @@ public class KryoBinaryMapper implements BinaryObjectMapper {
         kryo.setRegistrationRequired(false);
         kryo.setReferences(false);
         kryo.addDefaultSerializer(Throwable.class, new JavaSerializer());
+        kryo.setInstantiatorStrategy(new StdInstantiatorStrategy());
 
         return kryo;
     }
