@@ -23,6 +23,7 @@ public class KryoBinaryMapper implements BinaryObjectMapper {
 
     public KryoBinaryMapper(KryoFactory factory) {
         this.factory = factory;
+        factory.addOnChangeCallback(this::clearPools);
 
         this.kryoPool = new Pool<KryoContainer>(true, false, 1024) {
             @Override
