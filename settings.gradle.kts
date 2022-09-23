@@ -11,5 +11,6 @@ include(
     "types:multipaper",
     "types:multipaper:base",
 
-    "types:redisson"
+    "types:redisson",
+    "types:jedis"
 )
