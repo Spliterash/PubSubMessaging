@@ -19,7 +19,7 @@ public class KryoBinaryMapper implements BinaryObjectMapper {
     private final Pool<Input> inputPool;
     private final Pool<Output> outputPool;
     private final KryoFactory factory;
-    private volatile UUID poolStateUUID;
+    private volatile UUID poolStateUUID = UUID.randomUUID();
 
     public KryoBinaryMapper(KryoFactory factory) {
         this.factory = factory;
