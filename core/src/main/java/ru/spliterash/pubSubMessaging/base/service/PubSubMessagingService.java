@@ -109,6 +109,7 @@ public class PubSubMessagingService {
 
                     sendResult(bodyContainer.getSenderDomain(), container);
                 });
+                completable.orTimeout(TIMEOUT, TimeUnit.MILLISECONDS);
             } else {
                 sendResult(bodyContainer.getSenderDomain(), new RequestCompleteContainer<>(bodyContainer.getId(), response));
             }

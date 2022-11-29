@@ -6,7 +6,7 @@ plugins {
 val javaProjects by extra { allprojects - project(":publish") }
 
 allprojects {
-    version = "1.0.2"
+    version = "1.0.3"
 }
 
 
@@ -18,8 +18,8 @@ configure(javaProjects) {
         mavenCentral()
     }
     java {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
     }
 
     dependencies {

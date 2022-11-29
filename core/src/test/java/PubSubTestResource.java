@@ -31,4 +31,10 @@ public interface PubSubTestResource {
 
     @Request("void-method")
     void voidMethod(String str);
+
+    /**
+     * Метод который никогда не выполнится
+     */
+    @Request("never-complete-future")
+    CompletableFuture<Void> neverCompleteFuture();
 }

@@ -101,4 +101,9 @@ public class PubSubTestController implements PubSubTestResource {
     public void voidMethod(String str) {
         consumer.accept(str);
     }
+
+    @Override
+    public CompletableFuture<Void> neverCompleteFuture() {
+        return new CompletableFuture<>();
+    }
 }

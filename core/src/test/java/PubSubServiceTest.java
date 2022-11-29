@@ -124,5 +124,18 @@ public class PubSubServiceTest {
         testPubSub.setNeedSleep(false);
     }
 
+    @Test
+    public void timeoutReply() throws InterruptedException {
+        Runnable onCompleteRunnable = Mockito.mock(Runnable.class);
+
+        service2Client
+                .neverCompleteFuture()
+                .whenComplete((r, ex) -> onCompleteRunnable.run());
+
+        Thread.sleep(6000);
+
+        Mockito.verify(onCompleteRunnable).run();
+    }
+
 
 }
