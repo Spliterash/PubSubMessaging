@@ -23,10 +23,8 @@ public class LettucePubSub implements BinaryPubSubGateway {
                 listener.onEvent(message);
             }
         });
-        log.info("Try sub on " + path);
         connection.sync().subscribe(path);
         log.info("Success subscribe on " + path);
-
 
         return () -> {
             connection.sync().unsubscribe(path);

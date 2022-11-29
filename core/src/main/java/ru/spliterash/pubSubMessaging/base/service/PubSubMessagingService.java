@@ -109,6 +109,7 @@ public class PubSubMessagingService {
 
                     sendResult(bodyContainer.getSenderDomain(), container);
                 });
+                // Таймауты если оч долго выполняется штука
                 completable.orTimeout(TIMEOUT, TimeUnit.MILLISECONDS);
             } else {
                 sendResult(bodyContainer.getSenderDomain(), new RequestCompleteContainer<>(bodyContainer.getId(), response));
@@ -155,6 +156,14 @@ public class PubSubMessagingService {
         BodyContainer<Object> objectBodyContainer = new BodyContainer<>(requestID, currentDomain, path, body);
 
         requestsInProcess.put(requestID, future);
+        future.orTimeout(TIMEOUT, TimeUnit.MILLISECONDS);
+        future.whenComplete((r, ex) -> {
+            if (!(ex instanceof TimeoutException))
+                return; // Всё хорошо, ну или не совсем
+            // Если таймаут, не ждём ответ
+            requestsInProcess.remove(requestID);
+        });
+
         pubSubGateway.dispatch(getFullDomainPath(domain) + pubSubGateway.getNamespaceDelimiter() + IN, objectBodyContainer);
 
         return future;

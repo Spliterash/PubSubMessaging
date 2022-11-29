@@ -13,6 +13,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.fail;
+import static org.mockito.Mockito.times;
 
 public class PubSubServiceTest {
     private static final TestPubSub testPubSub = new TestPubSub();
@@ -126,15 +127,22 @@ public class PubSubServiceTest {
 
     @Test
     public void timeoutReply() throws InterruptedException {
-        Runnable onCompleteRunnable = Mockito.mock(Runnable.class);
+        Runnable expThrowRun = Mockito.mock(Runnable.class);
+        Runnable resultRun = Mockito.mock(Runnable.class);
 
         service2Client
                 .neverCompleteFuture()
-                .whenComplete((r, ex) -> onCompleteRunnable.run());
+                .whenComplete((r, ex) -> {
+                    if (ex == null)
+                        resultRun.run();
+                    else
+                        expThrowRun.run();
+                });
 
         Thread.sleep(6000);
 
-        Mockito.verify(onCompleteRunnable).run();
+        Mockito.verify(expThrowRun).run();
+        Mockito.verify(resultRun, times(0)).run();
     }
 
 
