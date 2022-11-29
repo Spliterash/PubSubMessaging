@@ -1,4 +1,4 @@
 dependencies {
-    api("redis.clients:jedis:4.2.3")
+    api("io.lettuce:lettuce-core:6.2.1.RELEASE")
     api(project(":types:binary"))
 }

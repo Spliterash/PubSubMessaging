@@ -6,7 +6,7 @@ plugins {
 val javaProjects by extra { allprojects - project(":publish") }
 
 allprojects {
-    version = "1.0.1"
+    version = "1.0.2"
 }
 
 

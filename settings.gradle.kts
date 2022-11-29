@@ -12,5 +12,6 @@ include(
     "types:multipaper:base",
 
     "types:redisson",
-    "types:jedis"
+    "types:jedis",
+    "types:lettuce",
 )
