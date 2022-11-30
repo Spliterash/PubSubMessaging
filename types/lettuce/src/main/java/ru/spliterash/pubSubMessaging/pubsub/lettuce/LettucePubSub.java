@@ -11,13 +11,14 @@ import ru.spliterash.pubSubMessaging.pubsub.binary.port.BinaryPubSubListener;
 @Log4j2
 @RequiredArgsConstructor
 public class LettucePubSub implements BinaryPubSubGateway {
-    private final LettuceConnectionProvider connectionProvider;
+    private final LettucePubSubConnectionProvider connectionProvider;
+    private final LettuceConnectionExecutor connectionExecutor;
 
     @Override
     public Subscribe subscribe(String path, BinaryPubSubListener listener) {
         StatefulRedisPubSubConnection<String, byte[]> connection = connectionProvider.getConnection();
 
-        connection.addListener(new RedisPubSubAdapter<String, byte[]>() {
+        connection.addListener(new RedisPubSubAdapter<>() {
             @Override
             public void message(String channel, byte[] message) {
                 listener.onEvent(message);
@@ -26,16 +27,11 @@ public class LettucePubSub implements BinaryPubSubGateway {
         connection.sync().subscribe(path);
         log.info("Success subscribe on " + path);
 
-        return () -> {
-            connection.sync().unsubscribe(path);
-            connection.close();
-        };
+        return connection::close;
     }
 
     @Override
     public void dispatch(String path, byte[] body) {
-        try (StatefulRedisPubSubConnection<String, byte[]> connection = connectionProvider.getConnection()) {
-            connection.sync().publish(path, body);
-        }
+        connectionExecutor.execute(connection -> connection.publish(path, body));
     }
 }
