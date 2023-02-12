@@ -2,7 +2,7 @@
 
 
 ## Warning
-If you don't have a good reason to use this, then it's better to use plain HTTP, because
+If you don't have a good reason to use this, then it's better to use another RPC sustem, because
 I wrote this library for faster and more convenient requests between specific game servers
 
 You will also not be able to check if the server is alive, or it simply decided not to respond to your request.
@@ -10,8 +10,7 @@ You will also not be able to check if the server is alive, or it simply decided 
 In general, this library is extremely situational.
 
 ## Introduction
-This simple library allows you to make requests between your server. It's a bit like the HTTP (request-response) model,
-but requests are transported through a message broker, or if it's easier through the pub / sub system
+This simple library allows you to make requests between your server, or in other words, this is an RPC implementation running on the pub/sub system.
 
 
 Registration and request send very similar to feign
@@ -59,7 +58,7 @@ First of all, you need to connect the maven repository and library BOM
 
 ```kotlin
 repositories {
-    maven("https://nexus.spliterash.ru/repository/group/") {
+    maven("https://repo.spliterash.ru/group/") {
         content { includeGroup("ru.spliterash") } // To just not stress for all other dependencies
     }
 }
