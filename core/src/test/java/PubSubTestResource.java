@@ -36,5 +36,5 @@ public interface PubSubTestResource {
      * Метод который никогда не выполнится
      */
     @Request("never-complete-future")
-    CompletableFuture<Void> neverCompleteFuture();
+    CompletableFuture<Void> rlyLongTask();
 }

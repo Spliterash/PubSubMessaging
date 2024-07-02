@@ -3,17 +3,19 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
+import ru.spliterash.pubSubMessaging.base.exceptions.PubSubTimeout;
 import ru.spliterash.pubSubMessaging.base.service.PubSubMessagingService;
 
 import java.lang.reflect.Field;
 import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
 import java.util.function.Consumer;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.fail;
-import static org.mockito.Mockito.times;
 
 public class PubSubServiceTest {
     private static final TestPubSub testPubSub = new TestPubSub();
@@ -29,11 +31,13 @@ public class PubSubServiceTest {
             testPubSub
     );
     private static PubSubTestResource service2Client;
+    private static PubSubTestResource unknownClient;
 
     @BeforeAll
     public static void init() {
         service2.registerHandler(PubSubTestResource.class, new PubSubTestController(consumer));
         service2Client = service1.createClient("service2", PubSubTestResource.class);
+        unknownClient = service1.createClient("unknown", PubSubTestResource.class);
     }
 
     @AfterAll
@@ -83,13 +87,15 @@ public class PubSubServiceTest {
     @Test
     public void testFutureException() {
         Runnable called = Mockito.mock(Runnable.class);
-        service2Client.futureMethodExc().whenComplete((uuid, throwable) -> {
-            called.run();
-            Assertions.assertNull(uuid);
-            Assertions.assertNotNull(throwable);
-            Assertions.assertInstanceOf(TestException.class, throwable);
-        });
-
+        try {
+            service2Client.futureMethodExc().whenComplete((uuid, throwable) -> {
+                called.run();
+                Assertions.assertNull(uuid);
+                Assertions.assertNotNull(throwable);
+                Assertions.assertInstanceOf(TestException.class, throwable);
+            }).join();
+        } catch (CompletionException ignore) {
+        }
         Mockito.verify(called).run();
     }
 
@@ -109,7 +115,7 @@ public class PubSubServiceTest {
         testPubSub.setNeedSleep(true);
         String testStr = "someString";
 
-        Field field = service2.getClass().getDeclaredField("requestsInProcess");
+        Field field = service2.getClass().getDeclaredField("outboundRequestsInProcess");
         field.setAccessible(true);
 
         Map requestsInProcess = (Map) field.get(service2);
@@ -127,23 +133,24 @@ public class PubSubServiceTest {
 
     @Test
     public void timeoutReply() throws InterruptedException {
-        Runnable expThrowRun = Mockito.mock(Runnable.class);
-        Runnable resultRun = Mockito.mock(Runnable.class);
-
+        long start = System.currentTimeMillis();
         service2Client
-                .neverCompleteFuture()
-                .whenComplete((r, ex) -> {
-                    if (ex == null)
-                        resultRun.run();
-                    else
-                        expThrowRun.run();
-                });
+                .rlyLongTask()
+                .join();
+        long timeSpend = System.currentTimeMillis() - start;
 
-        Thread.sleep(6000);
-
-        Mockito.verify(expThrowRun).run();
-        Mockito.verify(resultRun, times(0)).run();
+        Assertions.assertTrue(timeSpend >= 15000);
     }
 
+    @Test
+    public void noHeartbeat() {
+        try {
+            unknownClient.futureMethod().join();
+        } catch (CompletionException exp) {
+            assertEquals(PubSubTimeout.class, exp.getCause().getClass());
+            return;
+        }
 
+        fail("Exception not thrown");
+    }
 }

@@ -1,10 +1,12 @@
 package ru.spliterash.pubSubMessaging.base.service;
 
+import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
-import lombok.extern.log4j.Log4j2;
+import lombok.extern.slf4j.Slf4j;
 import ru.spliterash.pubSubMessaging.base.annotations.Request;
 import ru.spliterash.pubSubMessaging.base.annotations.RequestAnnotationUtils;
 import ru.spliterash.pubSubMessaging.base.body.BodyContainer;
+import ru.spliterash.pubSubMessaging.base.body.HeartbeatContainer;
 import ru.spliterash.pubSubMessaging.base.body.RequestCompleteContainer;
 import ru.spliterash.pubSubMessaging.base.exceptions.PubSubTimeout;
 import ru.spliterash.pubSubMessaging.base.pubSub.PubSubGateway;
@@ -17,7 +19,7 @@ import java.lang.reflect.Proxy;
 import java.util.*;
 import java.util.concurrent.*;
 
-@Log4j2
+@Slf4j
 public class PubSubMessagingService {
     /**
      * То КУДА приходят запросы
@@ -27,8 +29,11 @@ public class PubSubMessagingService {
      * То, ГДЕ мы ждём ОТВЕТЫ
      */
     private static final String OUT = "out";
+    /**
+     * Куда приходят уведы о том, что запрос ещё не сдох, просто долго
+     */
+    private static final String HEARTBEAT = "heartbeat";
 
-    private static final Integer TIMEOUT = 1000 * 5;
     // Стартовый путь
     private final String startPath;
     private final String currentDomain;
@@ -36,24 +41,41 @@ public class PubSubMessagingService {
     private final ClassLoader loader;
 
     private final Collection<Subscribe> domainSubscribe;
+    private final ScheduledExecutorService scheduledExecutorService;
 
     private final Map<String, RequestProcessor<?, ?>> listeners = new HashMap<>();
-    private final Map<UUID, CompletableFuture<Object>> requestsInProcess = new ConcurrentHashMap<>();
+    private final Map<UUID, OutboundRequestInProcess> outboundRequestsInProcess = new ConcurrentHashMap<>();
 
     public PubSubMessagingService(String startPath, String currentDomain, PubSubGateway pubSubGateway) {
-        this(PubSubMessagingService.class.getClassLoader(), startPath, currentDomain, pubSubGateway);
+        this(PubSubMessagingService.class.getClassLoader(), startPath, currentDomain, pubSubGateway, Executors.newSingleThreadScheduledExecutor((r) -> {
+            Thread thread = new Thread(r);
+            thread.setName("PubSubSchedulerThread");
+            return thread;
+        }));
     }
 
-    public PubSubMessagingService(ClassLoader loader, String startPath, String currentDomain, PubSubGateway pubSubGateway) {
+    public PubSubMessagingService(
+            ClassLoader loader,
+            String startPath,
+            String currentDomain,
+            PubSubGateway pubSubGateway,
+            ScheduledExecutorService executorService
+    ) {
         this.loader = loader;
         this.startPath = startPath;
         this.currentDomain = currentDomain;
         this.pubSubGateway = pubSubGateway;
+        this.scheduledExecutorService = executorService;
 
         Subscribe input = pubSubGateway.subscribe(
                 BodyContainer.class,
                 getFullDomainPath(currentDomain) + pubSubGateway.getNamespaceDelimiter() + IN,
                 this::processRequest
+        );
+        Subscribe heartbeat = pubSubGateway.subscribe(
+                HeartbeatContainer.class,
+                getFullDomainPath(currentDomain) + pubSubGateway.getNamespaceDelimiter() + HEARTBEAT,
+                this::acceptHeartbeat
         );
         Subscribe output = pubSubGateway.subscribe(
                 RequestCompleteContainer.class,
@@ -61,7 +83,18 @@ public class PubSubMessagingService {
                 this::acceptRequestCompleteNotification
         );
 
-        domainSubscribe = Arrays.asList(input, output);
+        domainSubscribe = Arrays.asList(input, heartbeat, output);
+
+    }
+
+    private void acceptHeartbeat(HeartbeatContainer heartbeatContainer) {
+        OutboundRequestInProcess request = outboundRequestsInProcess.get(heartbeatContainer.getRequestID());
+        if (request == null) {
+            log.warn("Received heartbeat, but no task with id {} found", heartbeatContainer.getRequestID());
+            return;
+        }
+
+        request.stillAlive();
     }
 
     @SuppressWarnings("unchecked")
@@ -94,8 +127,11 @@ public class PubSubMessagingService {
                         }
                     });
                 }
+                InboundRequestInProcess requestInProcess = new InboundRequestInProcess(bodyContainer.getId(), bodyContainer.getSenderDomain());
+                if (!completable.isDone())
+                    requestInProcess.startHeartbeatTask();
+
                 completable.whenCompleteAsync((o, throwable) -> {
-                    RequestCompleteContainer<Object> container;
                     if (throwable != null) {
                         Throwable finalThrowable;
                         if (throwable instanceof CompletionException)
@@ -103,14 +139,10 @@ public class PubSubMessagingService {
                         else
                             finalThrowable = throwable;
 
-                        container = new RequestCompleteContainer<>(bodyContainer.getId(), finalThrowable);
+                        requestInProcess.completeExceptionally(finalThrowable);
                     } else
-                        container = new RequestCompleteContainer<>(bodyContainer.getId(), o);
-
-                    sendResult(bodyContainer.getSenderDomain(), container);
+                        requestInProcess.complete(o);
                 });
-                // Таймауты если оч долго выполняется штука
-                completable.orTimeout(TIMEOUT, TimeUnit.MILLISECONDS);
             } else {
                 sendResult(bodyContainer.getSenderDomain(), new RequestCompleteContainer<>(bodyContainer.getId(), response));
             }
@@ -124,17 +156,26 @@ public class PubSubMessagingService {
         pubSubGateway.dispatch(getFullDomainPath(senderDomain + pubSubGateway.getNamespaceDelimiter() + OUT), container);
     }
 
+    private void sendHeartbeat(String domain, UUID requestId) {
+        pubSubGateway.dispatch(getFullDomainPath(domain + pubSubGateway.getNamespaceDelimiter() + HEARTBEAT), new HeartbeatContainer(requestId));
+    }
+
     private void acceptRequestCompleteNotification(RequestCompleteContainer<?> complete) {
         UUID id = complete.getRequestID();
 
-        CompletableFuture<Object> waitingFuture = requestsInProcess.remove(id);
-
-        if (waitingFuture != null) {
-            if (complete.isSuccess())
-                waitingFuture.complete(complete.getResponse());
-            else
-                waitingFuture.completeExceptionally(complete.getException());
+        OutboundRequestInProcess request = outboundRequestsInProcess.remove(id);
+        if (request == null) {
+            log.warn("Received completion for id " + id + ", but no task with current id found");
+            return;
         }
+        request.cancelTask();
+
+        CompletableFuture<Object> waitingFuture = request.result;
+
+        if (complete.isSuccess())
+            waitingFuture.complete(complete.getResponse());
+        else
+            waitingFuture.completeExceptionally(complete.getException());
     }
 
     protected String getFullDomainPath(String domain) {
@@ -150,23 +191,15 @@ public class PubSubMessagingService {
      * @return То что вернёт запрос
      */
     private CompletableFuture<Object> makeRequest(String domain, String path, Object body) {
-        CompletableFuture<Object> future = new CompletableFuture<>();
-
         UUID requestID = UUID.randomUUID();
         BodyContainer<Object> objectBodyContainer = new BodyContainer<>(requestID, currentDomain, path, body);
+        OutboundRequestInProcess request = new OutboundRequestInProcess(requestID, domain, path);
+        request.stillAlive();
 
-        requestsInProcess.put(requestID, future);
-        future.orTimeout(TIMEOUT, TimeUnit.MILLISECONDS);
-        future.whenComplete((r, ex) -> {
-            if (!(ex instanceof TimeoutException))
-                return; // Всё хорошо, ну или не совсем
-            // Если таймаут, не ждём ответ
-            requestsInProcess.remove(requestID);
-        });
-
+        outboundRequestsInProcess.put(requestID, request);
         pubSubGateway.dispatch(getFullDomainPath(domain) + pubSubGateway.getNamespaceDelimiter() + IN, objectBodyContainer);
 
-        return future;
+        return request.result;
     }
 
     private void makeRequestVoid(String domain, String path, Object body) {
@@ -215,9 +248,7 @@ public class PubSubMessagingService {
                 return requestFuture;
             } else
                 try {
-                    return requestFuture.get(TIMEOUT, TimeUnit.MILLISECONDS);
-                } catch (TimeoutException timeoutException) {
-                    throw new PubSubTimeout(domain, annotation.value());
+                    return requestFuture.get();
                 } catch (ExecutionException exception) {
                     throw exception.getCause();
                 }
@@ -267,6 +298,57 @@ public class PubSubMessagingService {
             }
         } catch (Exception exception) {
             throw new RuntimeException(exception);
+        }
+    }
+
+    @RequiredArgsConstructor
+    private class OutboundRequestInProcess {
+        private final UUID id;
+        private final String domain;
+        private final String path;
+        private final CompletableFuture<Object> result = new CompletableFuture<>();
+        private ScheduledFuture<?> cancellationTask;
+
+        public void stillAlive() {
+            if (cancellationTask != null) cancellationTask.cancel(false);
+            cancellationTask = scheduledExecutorService.schedule(() -> {
+                OutboundRequestInProcess removed = outboundRequestsInProcess.remove(id);
+                if (removed != this) return;
+
+                result.completeExceptionally(new PubSubTimeout(domain, path));
+            }, 5, TimeUnit.SECONDS);
+        }
+
+        public void cancelTask() {
+            if (cancellationTask != null) cancellationTask.cancel(false);
+            cancellationTask = null;
+        }
+    }
+
+    private final class InboundRequestInProcess {
+        private final UUID id;
+        private final String domain;
+        private ScheduledFuture<?> heartbeatTask;
+
+        public InboundRequestInProcess(UUID id, String domain) {
+            this.id = id;
+            this.domain = domain;
+        }
+
+        public void startHeartbeatTask() {
+            heartbeatTask = scheduledExecutorService.scheduleWithFixedDelay(() -> {
+                sendHeartbeat(domain, id);
+            }, 2, 2, TimeUnit.SECONDS);
+        }
+
+        public void complete(Object result) {
+            if (heartbeatTask != null) heartbeatTask.cancel(false);
+            sendResult(domain, new RequestCompleteContainer<>(id, result));
+        }
+
+        public void completeExceptionally(Throwable exception) {
+            if (heartbeatTask != null) heartbeatTask.cancel(false);
+            sendResult(domain, new RequestCompleteContainer<>(id, exception));
         }
     }
 

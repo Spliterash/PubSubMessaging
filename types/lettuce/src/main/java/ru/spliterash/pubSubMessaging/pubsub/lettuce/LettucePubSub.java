@@ -4,11 +4,12 @@ import io.lettuce.core.pubsub.RedisPubSubAdapter;
 import io.lettuce.core.pubsub.StatefulRedisPubSubConnection;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
+import lombok.extern.slf4j.Slf4j;
 import ru.spliterash.pubSubMessaging.base.pubSub.Subscribe;
 import ru.spliterash.pubSubMessaging.pubsub.binary.port.BinaryPubSubGateway;
 import ru.spliterash.pubSubMessaging.pubsub.binary.port.BinaryPubSubListener;
 
-@Log4j2
+@Slf4j
 @RequiredArgsConstructor
 public class LettucePubSub implements BinaryPubSubGateway {
     private final LettucePubSubConnectionProvider connectionProvider;

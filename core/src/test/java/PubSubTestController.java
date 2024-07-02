@@ -103,7 +103,14 @@ public class PubSubTestController implements PubSubTestResource {
     }
 
     @Override
-    public CompletableFuture<Void> neverCompleteFuture() {
-        return new CompletableFuture<>();
+    public CompletableFuture<Void> rlyLongTask() {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                Thread.sleep(15000);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+            return null;
+        });
     }
 }

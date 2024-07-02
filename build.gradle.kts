@@ -6,7 +6,7 @@ plugins {
 val javaProjects by extra { allprojects - project(":publish") }
 
 allprojects {
-    version = "1.0.4"
+    version = "1.1.0"
 }
 
 
@@ -23,7 +23,7 @@ configure(javaProjects) {
     }
 
     dependencies {
-        implementation("org.apache.logging.log4j:log4j-api:2.18.0")
+        implementation("org.slf4j:slf4j-api:2.0.13")
 
         testImplementation(platform("org.junit:junit-bom:5.9.0"))
         testImplementation("org.junit.jupiter:junit-jupiter")
