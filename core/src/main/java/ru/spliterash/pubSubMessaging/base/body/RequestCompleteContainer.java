@@ -1,11 +1,17 @@
 package ru.spliterash.pubSubMessaging.base.body;
 
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
+import lombok.extern.jackson.Jacksonized;
 
 import java.io.Serializable;
 import java.util.UUID;
 
 @Getter
+@Jacksonized
+@AllArgsConstructor
+@Builder
 public final class RequestCompleteContainer<T> implements Serializable {
     private final UUID requestID;
 
