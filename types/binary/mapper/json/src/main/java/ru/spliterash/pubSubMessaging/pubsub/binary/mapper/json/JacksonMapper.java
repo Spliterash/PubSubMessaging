@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.Module;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
 import com.fasterxml.jackson.databind.module.SimpleModule;
 import ru.spliterash.pubSubMessaging.pubsub.binary.port.BinaryObjectMapper;
@@ -17,6 +18,7 @@ public class JacksonMapper implements BinaryObjectMapper {
         mapper = new ObjectMapper();
         mapper.registerModules(jacksonModules);
         mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+        mapper.configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false);
         mapper.registerModules(new SimpleModule()
                 .addSerializer(Throwable.class, new ThrowableSerializer())
                 .addDeserializer(Throwable.class, new ThrowableDeserializer())
