@@ -5,7 +5,7 @@ import lombok.extern.jackson.Jacksonized;
 @Value
 @Builder
 @Jacksonized
-public class SimpleDto {
-    String strValue;
-    int intValue;
+public class MyCoolException extends Exception {
+    String field1;
+    int a;
 }

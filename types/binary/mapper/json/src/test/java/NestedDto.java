@@ -5,6 +5,7 @@ public class NestedDto {
     private String strValue;
     private CoolInterface coolInterface;
     private Nested nested;
+    private Exception exception;
 
     @Data
     public static class Nested {

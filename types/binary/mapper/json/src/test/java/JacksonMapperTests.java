@@ -9,12 +9,10 @@ public class JacksonMapperTests {
 
     @Test
     public void simpleSerialization() throws Exception {
-        var dto = new SimpleDto();
-
-        dto.setStrValue("CoolValue");
-        dto.setIntValue(1488);
+        var dto = new SimpleDto("CoolValue", 1488);
 
         byte[] stringValue = mapper.write(dto);
+        System.out.println(new String(stringValue));
         Object readDto = mapper.read(stringValue);
 
         Assertions.assertEquals(dto, readDto);
@@ -34,9 +32,22 @@ public class JacksonMapperTests {
         dto.setCoolInterface(coolInterface);
 
         byte[] stringValue = mapper.write(dto);
+        System.out.println(new String(stringValue));
         Object readDto = mapper.read(stringValue);
 
         Assertions.assertEquals(dto, readDto);
+    }
+
+    @Test
+    public void expSerialize() throws Exception {
+        var dto = new MyCoolException("f", 1);
+
+        byte[] stringValue = mapper.write(dto);
+        System.out.println(new String(stringValue));
+        MyCoolException readDto = (MyCoolException) mapper.read(stringValue);
+
+
+        Assertions.assertEquals(dto.getMessage(), readDto.getMessage());
     }
 
 }
