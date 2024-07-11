@@ -40,9 +40,4 @@ public class ThrowableDeserializer extends StdDeserializer<Throwable> {
             throw new IOException("Class not found during deserialization", e);
         }
     }
-
-    @Override
-    public Object deserializeWithType(JsonParser p, DeserializationContext ctxt, TypeDeserializer typeDeserializer) throws IOException {
-        return new IOException();
-    }
 }
