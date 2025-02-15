@@ -226,9 +226,6 @@ public class PubSubMessagingService {
     public <T> T createClient(String domain, Class<T> clientClass) {
         return (T) Proxy.newProxyInstance(loader, new Class[]{clientClass}, (proxy, method, args) -> {
             Request annotation = method.getAnnotation(Request.class);
-
-            if (annotation == null)
-                throw new RuntimeException("Annotation request not present");
             Object arg;
             if (args == null || args.length == 0)
                 arg = null;
@@ -236,7 +233,7 @@ public class PubSubMessagingService {
                 arg = args[0];
             else
                 throw new RuntimeException("Too many arguments on method " + method.getName() + " in class " + clientClass.getName());
-            String path = RequestAnnotationUtils.getFullPath(clientClass, annotation);
+            String path = RequestAnnotationUtils.getFullPath(clientClass, method, annotation);
 
             if (method.getReturnType().equals(void.class)) {
                 makeRequestVoid(domain, path, arg);
@@ -260,12 +257,10 @@ public class PubSubMessagingService {
             MethodHandles.Lookup lookup = MethodHandles.publicLookup();
             for (Method method : listenerClass.getMethods()) {
                 Request request = method.getAnnotation(Request.class);
-                if (request == null)
-                    throw new RuntimeException("Request not present exception");
                 MethodHandle methodHandle = lookup.unreflect(method).bindTo(instance);
                 int parameterCount = method.getParameterTypes().length;
 
-                String methodPath = RequestAnnotationUtils.getFullPath(listenerClass, request);
+                String methodPath = RequestAnnotationUtils.getFullPath(listenerClass, method, request);
                 boolean isVoid = method.getReturnType().equals(void.class);
 
                 if (parameterCount == 0)
