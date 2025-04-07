@@ -139,7 +139,25 @@ public class PubSubServiceTest {
                 .join();
         long timeSpend = System.currentTimeMillis() - start;
 
-        Assertions.assertTrue(timeSpend >= 15000);
+        Assertions.assertTrue(timeSpend >= 10000 && timeSpend <= 15000);
+    }
+
+    @Test
+    public void timeoutReplyMulti() throws InterruptedException {
+        long start = System.currentTimeMillis();
+        var task1 = service2Client
+                .rlyLongTask();
+        var task2 = service2Client
+                .rlyLongTask();
+        var task3 = service2Client
+                .rlyLongTask();
+        task1.join();
+        task2.join();
+        task3.join();
+
+        long timeSpend = System.currentTimeMillis() - start;
+        System.out.println(timeSpend);
+        Assertions.assertTrue(10000 <= timeSpend && timeSpend <= 15000);
     }
 
     @Test

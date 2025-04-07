@@ -106,7 +106,7 @@ public class PubSubTestController implements PubSubTestResource {
     public CompletableFuture<Void> rlyLongTask() {
         return CompletableFuture.supplyAsync(() -> {
             try {
-                Thread.sleep(15000);
+                Thread.sleep(10000);
             } catch (InterruptedException e) {
                 throw new RuntimeException(e);
             }

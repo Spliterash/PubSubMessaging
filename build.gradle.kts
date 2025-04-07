@@ -1,12 +1,12 @@
 plugins {
     `java-library`
     `maven-publish`
-    id("io.freefair.lombok") version "6.5.1" apply false
+    id("io.freefair.lombok") version "8.13.1" apply false
 }
 val javaProjects by extra { allprojects - project(":publish") }
 
 allprojects {
-    version = "1.1.7"
+    version = "1.1.8"
 }
 
 
@@ -18,8 +18,8 @@ configure(javaProjects) {
         mavenCentral()
     }
     java {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
+        sourceCompatibility = JavaVersion.VERSION_21
+        targetCompatibility = JavaVersion.VERSION_21
     }
 
     dependencies {

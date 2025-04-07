@@ -42,16 +42,18 @@ public class PubSubMessagingService {
 
     private final Collection<Subscribe> domainSubscribe;
     private final ScheduledExecutorService scheduledExecutorService;
+    private final ExecutorService executorService;
+
 
     private final Map<String, RequestProcessor<?, ?>> listeners = new HashMap<>();
     private final Map<UUID, OutboundRequestInProcess> outboundRequestsInProcess = new ConcurrentHashMap<>();
 
     public PubSubMessagingService(String startPath, String currentDomain, PubSubGateway pubSubGateway) {
-        this(PubSubMessagingService.class.getClassLoader(), startPath, currentDomain, pubSubGateway, Executors.newSingleThreadScheduledExecutor((r) -> {
-            Thread thread = new Thread(r);
-            thread.setName("PubSubSchedulerThread");
-            return thread;
-        }));
+        this(PubSubMessagingService.class.getClassLoader(), startPath, currentDomain, pubSubGateway,
+                Executors.newSingleThreadScheduledExecutor(Thread.ofPlatform()
+                        .name("PubSubScheduler")
+                        .factory()),
+                Executors.newThreadPerTaskExecutor(Thread.ofVirtual().name("PubSubExecutor").factory()));
     }
 
     public PubSubMessagingService(
@@ -59,28 +61,30 @@ public class PubSubMessagingService {
             String startPath,
             String currentDomain,
             PubSubGateway pubSubGateway,
-            ScheduledExecutorService executorService
+            ScheduledExecutorService scheduledExecutorService,
+            ExecutorService executorService
     ) {
         this.loader = loader;
         this.startPath = startPath;
         this.currentDomain = currentDomain;
         this.pubSubGateway = pubSubGateway;
-        this.scheduledExecutorService = executorService;
+        this.scheduledExecutorService = scheduledExecutorService;
+        this.executorService = executorService;
 
         Subscribe input = pubSubGateway.subscribe(
                 BodyContainer.class,
                 getFullDomainPath(currentDomain) + pubSubGateway.getNamespaceDelimiter() + IN,
-                this::processRequest
+                bodyContainer -> executorService.execute(() -> processRequest(bodyContainer))
         );
         Subscribe heartbeat = pubSubGateway.subscribe(
                 HeartbeatContainer.class,
                 getFullDomainPath(currentDomain) + pubSubGateway.getNamespaceDelimiter() + HEARTBEAT,
-                this::acceptHeartbeat
+                heartbeatContainer -> executorService.execute(() -> acceptHeartbeat(heartbeatContainer))
         );
         Subscribe output = pubSubGateway.subscribe(
                 RequestCompleteContainer.class,
                 getFullDomainPath(currentDomain) + pubSubGateway.getNamespaceDelimiter() + OUT,
-                this::acceptRequestCompleteNotification
+                complete -> executorService.execute(() -> acceptRequestCompleteNotification(complete))
         );
 
         domainSubscribe = Arrays.asList(input, heartbeat, output);
@@ -142,7 +146,7 @@ public class PubSubMessagingService {
                         requestInProcess.completeExceptionally(finalThrowable);
                     } else
                         requestInProcess.complete(o);
-                });
+                }, executorService);
             } else {
                 sendResult(bodyContainer.getSenderDomain(), new RequestCompleteContainer<>(bodyContainer.getId(), response));
             }
@@ -307,10 +311,12 @@ public class PubSubMessagingService {
         public void stillAlive() {
             if (cancellationTask != null) cancellationTask.cancel(false);
             cancellationTask = scheduledExecutorService.schedule(() -> {
-                OutboundRequestInProcess removed = outboundRequestsInProcess.remove(id);
-                if (removed != this) return;
+                executorService.execute(() -> {
+                    OutboundRequestInProcess removed = outboundRequestsInProcess.remove(id);
+                    if (removed != this) return;
 
-                result.completeExceptionally(new PubSubTimeout(domain, path));
+                    result.completeExceptionally(new PubSubTimeout(domain, path));
+                });
             }, 5, TimeUnit.SECONDS);
         }
 
@@ -331,9 +337,9 @@ public class PubSubMessagingService {
         }
 
         public void startHeartbeatTask() {
-            heartbeatTask = scheduledExecutorService.scheduleWithFixedDelay(() -> {
-                sendHeartbeat(domain, id);
-            }, 2, 2, TimeUnit.SECONDS);
+            heartbeatTask = scheduledExecutorService.scheduleWithFixedDelay(() ->
+                            executorService.execute(() -> sendHeartbeat(domain, id)), 2, 2,
+                    TimeUnit.SECONDS);
         }
 
         public void complete(Object result) {
